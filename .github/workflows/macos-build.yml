@@ -1,0 +1,45 @@
+name: macOS Build (community)
+
+# 手动触发：在 GitHub 仓库的 Actions 页面选择本工作流并点击 "Run workflow"
+on:
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    name: Build macOS universal DMG
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Rust build cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      # 本项目未配置 macOS 签名与公证，关闭更新器签名产物生成以避免构建失败
+      - name: Disable updater artifacts (unsigned community build)
+        run: |
+          sed -i '' 's/"createUpdaterArtifacts": true/"createUpdaterArtifacts": false/' apps/desktop/src-tauri/tauri.conf.json
+
+      - name: Install frontend dependencies
+        run: bun install
+
+      - name: Build universal macOS bundle (aarch64 + x86_64)
+        working-directory: apps/desktop
+        run: bun x tauri build --target universal-apple-darwin
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ShaPrint-macos-universal-dmg
+          path: apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
