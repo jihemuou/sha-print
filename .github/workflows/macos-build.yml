@@ -33,6 +33,12 @@ jobs:
       - name: Install frontend dependencies
         run: bun install
 
+      # Tauri 的 macOS 打包器会把 Cargo.toml 里的全部 [[bin]]（含 shaprintd、shaprintctl）
+      # 复制进 .app，但 tauri build 默认只编译主程序，因此先预编译所有 bin
+      - name: Pre-build all binaries for universal target
+        working-directory: apps/desktop/src-tauri
+        run: cargo build --release --target universal-apple-darwin --bins
+
       - name: Build universal macOS bundle (aarch64 + x86_64)
         working-directory: apps/desktop
         run: bun x tauri build --target universal-apple-darwin
