@@ -34,7 +34,8 @@ jobs:
         run: bun install
 
       # Tauri 的 macOS 打包器会把 Cargo.toml 里的全部 [[bin]]（含 shaprintd、shaprintctl）
-      # 复制进 .app，但 tauri build 默认只编译主程序，因此先预编译所有 bin
+      # 复制进 .app，但 tauri build 只编译主程序。"universal-apple-darwin" 是 Tauri 的
+      # 虚拟目标（cargo 不认识），因此按 Tauri 的方式分别编译两个架构再用 lipo 合并
       - name: Pre-build helper binaries for both architectures
         working-directory: apps/desktop/src-tauri
         run: |
@@ -59,3 +60,51 @@ jobs:
           name: ShaPrint-macos-universal-dmg
           path: apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
           if-no-files-found: error
+
+      # ===== 冒烟验证：在真实 macOS 上挂载、安装、启动并截图 =====
+      - name: Smoke test - mount DMG and check architectures
+        id: smoke
+        run: |
+          set -e
+          DMG=$(ls apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg | head -1)
+          echo "DMG 文件: $DMG"
+          hdiutil attach "$DMG" -nobrowse -quiet
+          APP=$(ls -d /Volumes/*/ShaPrint.app | head -1)
+          echo "APP 路径: $APP"
+          echo "内含架构: $(lipo -archs "$APP/Contents/MacOS/shaprint-desktop")"
+          echo "签名状态:"; codesign -dv "$APP" 2>&1 || true
+          cp -R "$APP" /Applications/
+          hdiutil detach "$(dirname "$APP")" -quiet || true
+          echo "已安装到 /Applications/ShaPrint.app"
+
+      # CI 虚拟机默认不运行 CUPS（也没接打印机），手动拉起服务并注册一台虚拟测试打印机，
+      # 让截图能验证"枚举打印机"链路；真实 Mac 上此步骤无需存在
+      - name: Smoke test - start CUPS service and add dummy printer
+        run: |
+          sudo cupsd || sudo launchctl kickstart -kp system/org.cups.cupsd || echo "::warning::cupsd 启动失败"
+          sleep 3
+          echo "===== CUPS 服务状态 ====="
+          curl -sS -I http://127.0.0.1:631/ | head -3 || echo "::warning::CUPS 未在 631 端口响应"
+          sudo lpadmin -p ShaPrintTestPrinter -E -v "lpd://192.0.2.1/" -L "CI dummy queue" 2>&1 || echo "::warning::虚拟打印机注册失败"
+          lpstat -p 2>&1 || true
+
+      - name: Smoke test - launch app and take screenshot
+        run: |
+          open -a /Applications/ShaPrint.app || echo "::warning::open 命令返回异常"
+          sleep 20
+          echo "===== 进程列表 ====="
+          pgrep -fl "ShaPrint|shaprint" || echo "::error::未发现 ShaPrint 进程，应用可能启动即崩溃"
+          echo "===== 窗口/应用注册状态 ====="
+          osascript -e 'tell application "System Events" to get name of every process whose name contains "ShaPrint"' 2>&1 || true
+          echo "===== 崩溃报告 ====="
+          ls -la ~/Library/Logs/DiagnosticReports/ 2>/dev/null || echo "无崩溃报告目录"
+          screencapture -x "$PWD/macos-smoke-screen.png" 2>&1 || echo "::warning::截屏失败（可能受 TCC 权限限制）"
+          ls -la "$PWD"/macos-smoke-screen.png 2>/dev/null || true
+
+      - name: Upload smoke test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-smoke-test-screenshots
+          path: macos-smoke-screen.png
+          if-no-files-found: warn
