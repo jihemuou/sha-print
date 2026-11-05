@@ -115,7 +115,7 @@ pub fn default_socket_path() -> PathBuf {
 /// it — `SHAPRINT_CONTROL=local` (development only) keeps the in-process plane instead.
 /// Everywhere else the window owns the runtimes itself.
 pub fn system_control_plane(shell: &Arc<Shell>) -> SharedControl {
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     {
         let local = std::env::var(CONTROL_ENV)
             .map(|value| value.eq_ignore_ascii_case("local"))
