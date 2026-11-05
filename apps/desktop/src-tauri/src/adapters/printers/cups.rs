@@ -165,6 +165,10 @@ pub(crate) fn libcups() -> Result<&'static LibCups, AppError> {
 }
 
 fn load_libcups() -> Result<LibCups, String> {
+    // macOS ships CUPS as `libcups.2.dylib` (in /usr/lib); Linux ships `libcups.so.2`.
+    #[cfg(target_os = "macos")]
+    let candidates = ["libcups.2.dylib\0", "/usr/lib/libcups.2.dylib\0"];
+    #[cfg(not(target_os = "macos"))]
     let candidates = ["libcups.so.2\0", "libcups.so\0"];
     let mut handle = std::ptr::null_mut();
     for candidate in candidates {
@@ -176,7 +180,7 @@ fn load_libcups() -> Result<LibCups, String> {
         }
     }
     if handle.is_null() {
-        return Err("libcups.so.2 is not installed or could not be loaded".to_owned());
+        return Err("libcups is not installed or could not be loaded".to_owned());
     }
 
     unsafe fn sym<T>(handle: *mut c_void, name: &'static [u8]) -> Result<T, String> {
