@@ -831,7 +831,7 @@ fn show_main_window(app: &tauri::AppHandle) {
 ///
 /// Returns whether the app can still be reached once its window is closed: a tray that could not
 /// be created leaves the window as the only way in, which is what closing then means.
-#[cfg(all(feature = "desktop", unix))]
+#[cfg(all(feature = "desktop", target_os = "linux"))]
 fn install_tray(app: &tauri::AppHandle) -> bool {
     // On Linux there is no guaranteed StatusNotifier host (GNOME ships none by default), so a
     // hide-to-tray close would leave the app unreachable. Closing exits instead — with machine
@@ -845,7 +845,7 @@ fn install_tray(app: &tauri::AppHandle) -> bool {
 ///
 /// Returns whether the app can still be reached once its window is closed: a tray that could not
 /// be created leaves the window as the only way in, which is what closing then means.
-#[cfg(all(feature = "desktop", windows))]
+#[cfg(all(feature = "desktop", any(windows, target_os = "macos")))]
 fn install_tray(app: &tauri::AppHandle) -> bool {
     use tauri::menu::{Menu, MenuItem};
     use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
