@@ -35,9 +35,19 @@ jobs:
 
       # Tauri 的 macOS 打包器会把 Cargo.toml 里的全部 [[bin]]（含 shaprintd、shaprintctl）
       # 复制进 .app，但 tauri build 默认只编译主程序，因此先预编译所有 bin
-      - name: Pre-build all binaries for universal target
+      - name: Pre-build helper binaries for both architectures
         working-directory: apps/desktop/src-tauri
-        run: cargo build --release --target universal-apple-darwin --bins
+        run: |
+          set -e
+          cargo build --release --target aarch64-apple-darwin --bins
+          cargo build --release --target x86_64-apple-darwin --bins
+          mkdir -p target/universal-apple-darwin/release
+          for bin in shaprintd shaprintctl; do
+            lipo -create \
+              target/aarch64-apple-darwin/release/$bin \
+              target/x86_64-apple-darwin/release/$bin \
+              -output target/universal-apple-darwin/release/$bin
+          done
 
       - name: Build universal macOS bundle (aarch64 + x86_64)
         working-directory: apps/desktop
